@@ -8,6 +8,7 @@ const MOVEMENT_SPEED = 5;
 const SPRINT_MULTIPLIER = 2;
 const JUMP_FORCE = 10;
 const GRAVITY = 30;
+const MOUSE_SENSITIVITY = 0.002;
 
 // Game state
 const keysPressed = {};
@@ -15,6 +16,11 @@ let playerVelocity = new THREE.Vector3();
 let playerOnGround = false;
 let playerCrouching = false;
 let colliders = [];
+let isRightMouseDown = false;
+let mouseMoveX = 0;
+let mouseMoveY = 0;
+let cameraRotation = 0;
+let cameraTilt = 0;
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -75,6 +81,40 @@ document.addEventListener('keyup', (event) => {
     keysPressed[event.key.toLowerCase()] = false;
 });
 
+// Mouse event listeners for camera control
+document.addEventListener('mousedown', (event) => {
+    // Check if right mouse button is pressed (event.button 2 is right click)
+    if (event.button === 2) {
+        isRightMouseDown = true;
+    }
+});
+
+document.addEventListener('mouseup', (event) => {
+    if (event.button === 2) {
+        isRightMouseDown = false;
+    }
+});
+
+document.addEventListener('mousemove', (event) => {
+    if (isRightMouseDown && !controls.enabled) {
+        // Store mouse movement
+        mouseMoveX = event.movementX || 0;
+        mouseMoveY = event.movementY || 0;
+        
+        // Update camera rotation based on mouse movement
+        cameraRotation -= mouseMoveX * MOUSE_SENSITIVITY;
+        cameraTilt -= mouseMoveY * MOUSE_SENSITIVITY;
+        
+        // Limit the vertical camera tilt
+        cameraTilt = Math.max(Math.min(cameraTilt, Math.PI / 4), -Math.PI / 4);
+    }
+});
+
+// Prevent context menu on right-click
+document.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+});
+
 // Window resize handler
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -109,9 +149,17 @@ function updatePlayer(delta, time) {
         playerVelocity.y -= GRAVITY * delta;
     }
     
-    // Calculate forward direction (relative to the cat's rotation)
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cat.quaternion);
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cat.quaternion);
+    // Calculate forward direction (relative to the camera rotation for movement)
+    const forward = new THREE.Vector3(
+        Math.sin(cameraRotation), 
+        0, 
+        Math.cos(cameraRotation)
+    );
+    const right = new THREE.Vector3(
+        Math.sin(cameraRotation + Math.PI/2), 
+        0, 
+        Math.cos(cameraRotation + Math.PI/2)
+    );
     
     // Movement - store the intended movement direction
     const moveDirection = new THREE.Vector3(0, 0, 0);
@@ -207,16 +255,29 @@ function updatePlayer(delta, time) {
     if (cat.position.z > 14) cat.position.z = 14;
 }
 
-// Camera follows player
+// Camera follows player with the additional right-click rotation
 function updateCamera() {
-    // Position camera behind the cat
-    const cameraOffset = new THREE.Vector3(0, 2, 5);
-    cameraOffset.applyQuaternion(cat.quaternion);
-    cameraOffset.add(cat.position);
+    // Calculate the camera position based on both the cat's position and the camera rotation
+    const cameraDistance = 5;
+    const cameraHeight = 2;
+    
+    // Calculate the camera's position based on the rotation
+    const cameraOffset = new THREE.Vector3(
+        Math.sin(cameraRotation) * cameraDistance,
+        cameraHeight + Math.sin(cameraTilt) * cameraDistance,
+        Math.cos(cameraRotation) * cameraDistance
+    );
+    
+    // Position the camera behind the cat
+    const targetCameraPosition = cat.position.clone().add(cameraOffset);
     
     // Smoothly move camera
-    camera.position.lerp(cameraOffset, 0.1);
-    camera.lookAt(cat.position);
+    camera.position.lerp(targetCameraPosition, 0.1);
+    
+    // Look at the cat (slightly above to see more of the environment)
+    const lookTarget = cat.position.clone();
+    lookTarget.y += 0.5; // Look slightly above the cat
+    camera.lookAt(lookTarget);
 }
 
 // Create living room environment
