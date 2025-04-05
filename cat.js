@@ -127,27 +127,53 @@ export function createFluffyCat() {
     cat.add(tail);
     
     // Add animation methods
-    cat.animateLegs = function(time) {
+    cat.animateLegs = function(time, speedFactor = 1.0) {
         const legSpeed = 3;
-        const legAmplitude = 0.1;
+        const legAmplitude = 0.15; // Increased amplitude for more visible movement
         
-        // Animate legs while moving
-        if (cat.velocity && (cat.velocity.x !== 0 || cat.velocity.z !== 0)) {
-            frontLeftLeg.rotation.x = Math.sin(time * legSpeed) * legAmplitude;
-            frontRightLeg.rotation.x = Math.sin(time * legSpeed + Math.PI) * legAmplitude;
-            backLeftLeg.rotation.x = Math.sin(time * legSpeed + Math.PI) * legAmplitude;
-            backRightLeg.rotation.x = Math.sin(time * legSpeed) * legAmplitude;
+        // Animate legs based on movement and speed
+        if (cat.velocity && (Math.abs(cat.velocity.x) > 0.01 || Math.abs(cat.velocity.z) > 0.01)) {
+            // Scale the animation by speed
+            const effectiveSpeed = legSpeed * speedFactor;
+            
+            // Use a smoother animation curve with additional sine waves for more natural movement
+            frontLeftLeg.rotation.x = Math.sin(time * effectiveSpeed) * legAmplitude;
+            frontRightLeg.rotation.x = Math.sin(time * effectiveSpeed + Math.PI) * legAmplitude;
+            backLeftLeg.rotation.x = Math.sin(time * effectiveSpeed + Math.PI) * legAmplitude;
+            backRightLeg.rotation.x = Math.sin(time * effectiveSpeed) * legAmplitude;
+            
+            // Add slight side-to-side sway for more natural walking
+            const swayAmount = 0.03 * speedFactor;
+            body.rotation.z = Math.sin(time * effectiveSpeed * 2) * swayAmount;
+            head.rotation.z = Math.sin(time * effectiveSpeed * 2 + 0.3) * swayAmount * 0.5;
+            
+            // Add subtle up and down bounce to the body
+            const bounceAmount = 0.05 * speedFactor;
+            body.position.y = 0.4 + Math.sin(time * effectiveSpeed * 2) * bounceAmount;
         } else {
             // Reset legs when stationary
             frontLeftLeg.rotation.x = 0;
             frontRightLeg.rotation.x = 0;
             backLeftLeg.rotation.x = 0;
             backRightLeg.rotation.x = 0;
+            body.rotation.z = 0;
+            head.rotation.z = 0;
+            body.position.y = 0.4;
+            
+            // Idle animation - subtle breathing
+            const breatheAmount = 0.03;
+            body.scale.y = 0.6 + Math.sin(time * 0.5) * breatheAmount;
         }
     };
     
     cat.animateTail = function(time) {
-        tail.rotation.y = Math.sin(time * 2) * 0.3;
+        // Make tail wag more energetically if moving
+        const tailWagSpeed = (cat.velocity && (Math.abs(cat.velocity.x) > 0.01 || Math.abs(cat.velocity.z) > 0.01)) ? 3 : 1;
+        const tailWagAmount = (cat.velocity && (Math.abs(cat.velocity.x) > 0.01 || Math.abs(cat.velocity.z) > 0.01)) ? 0.5 : 0.3;
+        
+        // Use a combination of sine waves for more natural, less robotic movement
+        tail.rotation.y = Math.sin(time * tailWagSpeed) * tailWagAmount + 
+                         Math.sin(time * tailWagSpeed * 1.5) * tailWagAmount * 0.3;
     };
     
     cat.crouch = function(isCrouching) {

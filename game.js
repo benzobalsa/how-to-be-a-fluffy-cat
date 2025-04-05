@@ -9,10 +9,14 @@ const SPRINT_MULTIPLIER = 2;
 const JUMP_FORCE = 10;
 const GRAVITY = 30;
 const MOUSE_SENSITIVITY = 0.002;
+const ACCELERATION = 8.0; // How quickly the cat accelerates
+const DECELERATION = 10.0; // How quickly the cat slows down
+const MAX_VELOCITY = 8.0; // Maximum velocity when sprinting
 
 // Game state
 const keysPressed = {};
 let playerVelocity = new THREE.Vector3();
+let playerMovementVelocity = new THREE.Vector3(); // Separate velocity for smooth movement
 let playerOnGround = false;
 let playerCrouching = false;
 let colliders = [];
@@ -163,7 +167,8 @@ function updatePlayer(delta, time) {
     
     // Movement - store the intended movement direction
     const moveDirection = new THREE.Vector3(0, 0, 0);
-    const moveSpeed = keysPressed['shift'] ? MOVEMENT_SPEED * SPRINT_MULTIPLIER : MOVEMENT_SPEED;
+    const isSprinting = keysPressed['shift'];
+    const maxSpeed = isSprinting ? MOVEMENT_SPEED * SPRINT_MULTIPLIER : MOVEMENT_SPEED;
     
     // Forward/backward
     if (keysPressed['w']) {
@@ -181,13 +186,41 @@ function updatePlayer(delta, time) {
         moveDirection.add(right);
     }
     
-    // Normalize movement vector and apply speed
+    // Normalize input direction
     if (moveDirection.length() > 0) {
-        moveDirection.normalize().multiplyScalar(moveSpeed * delta);
+        moveDirection.normalize();
+        
+        // Apply acceleration in the input direction
+        const accelerationFactor = ACCELERATION * delta;
+        playerMovementVelocity.x += moveDirection.x * accelerationFactor;
+        playerMovementVelocity.z += moveDirection.z * accelerationFactor;
         
         // Point cat in movement direction
         const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
-        cat.rotation.y = THREE.MathUtils.lerp(cat.rotation.y, targetRotation, 0.2);
+        cat.rotation.y = THREE.MathUtils.lerp(cat.rotation.y, targetRotation, 0.1);
+    } else {
+        // Apply deceleration when no input
+        const decelerationFactor = DECELERATION * delta;
+        const velocityLength = new THREE.Vector2(playerMovementVelocity.x, playerMovementVelocity.z).length();
+        
+        if (velocityLength > 0) {
+            const reductionFactor = Math.min(decelerationFactor / velocityLength, 1.0);
+            playerMovementVelocity.x -= playerMovementVelocity.x * reductionFactor;
+            playerMovementVelocity.z -= playerMovementVelocity.z * reductionFactor;
+            
+            // If velocity is very small, just set it to zero
+            if (new THREE.Vector2(playerMovementVelocity.x, playerMovementVelocity.z).length() < 0.05) {
+                playerMovementVelocity.x = 0;
+                playerMovementVelocity.z = 0;
+            }
+        }
+    }
+    
+    // Limit max velocity
+    const currentSpeed = new THREE.Vector2(playerMovementVelocity.x, playerMovementVelocity.z).length();
+    if (currentSpeed > maxSpeed) {
+        playerMovementVelocity.x = (playerMovementVelocity.x / currentSpeed) * maxSpeed;
+        playerMovementVelocity.z = (playerMovementVelocity.z / currentSpeed) * maxSpeed;
     }
     
     // Store current position for collision detection
@@ -203,18 +236,30 @@ function updatePlayer(delta, time) {
     playerCrouching = keysPressed['control'];
     cat.crouch(playerCrouching);
     
-    // Update cat animation
-    cat.velocity = moveDirection.clone().divideScalar(delta);
-    cat.animateLegs(time);
+    // Update cat animation based on movement velocity
+    // Scale animation speed by movement speed
+    const movementSpeed = new THREE.Vector2(playerMovementVelocity.x, playerMovementVelocity.z).length();
+    const animationSpeed = THREE.MathUtils.clamp(movementSpeed / maxSpeed, 0, 1);
+    
+    cat.velocity = new THREE.Vector3(
+        playerMovementVelocity.x,
+        0,
+        playerMovementVelocity.z
+    );
+    
+    cat.animateLegs(time, animationSpeed);
     cat.animateTail(time);
     
-    // Apply movement and check for collisions
-    const potentialNewPosition = oldPosition.clone().add(moveDirection);
-    potentialNewPosition.y += playerVelocity.y * delta;
+    // Apply movement velocity and check for collisions
+    const movement = new THREE.Vector3(
+        playerMovementVelocity.x * delta,
+        0,
+        playerMovementVelocity.z * delta
+    );
     
     // Move X and Z, then check collisions
-    cat.position.x = potentialNewPosition.x;
-    cat.position.z = potentialNewPosition.z;
+    cat.position.x += movement.x;
+    cat.position.z += movement.z;
     
     // Check for collisions with objects
     const catWorldBox = catBoundingBox.clone().translate(cat.position);
@@ -225,6 +270,9 @@ function updatePlayer(delta, time) {
             collisionDetected = true;
             // Move back to old position on X/Z
             cat.position.copy(oldPosition);
+            
+            // Zero out velocity on collision for better responsiveness
+            playerMovementVelocity.set(0, 0, 0);
             break;
         }
     }
