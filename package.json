@@ -1,0 +1,16 @@
+{
+  "name": "floofy-cat-escape",
+  "version": "1.0.0",
+  "description": "A 3D browser game where you play as a fluffy cat trying to escape a house",
+  "main": "game.js",
+  "scripts": {
+    "start": "npx vite",
+    "build": "npx vite build"
+  },
+  "dependencies": {
+    "three": "^0.159.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+} 
